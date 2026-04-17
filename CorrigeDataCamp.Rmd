@@ -1,0 +1,140 @@
+---
+title: "CorrigeDataCamp"
+author: "Eva Gamón López"
+date: "2026-04-14"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Librerias
+```{r}
+library(readxl)
+library(writexl)
+library(stringr)
+```
+
+# Descomprimir el zip
+```{r}
+unzip("data/archivo.zip", exdir = "data/descomprimidas")
+```
+
+# Busco todos los ficheros puntos.txt en la carpeta descomprimida
+```{r}
+puntos_files <- list.files(path = "data/descomprimidas", 
+                           pattern = "\\.txt$", 
+                           recursive = TRUE, 
+                           full.names = TRUE)
+cat("Número de ficheros encontrados:", length(puntos_files), "\n\n")
+```
+
+# Busco los como acaba (pdf, png, jpg, jpeg)
+```{r}
+justificantes <- list.files(path = "data/descomprimidas", 
+                            pattern = "\\.(pdf|png|jpg|jpeg)$", 
+                            recursive = TRUE, 
+                            full.names = TRUE)
+cat("Número de justificantes encontrados:", length(justificantes), "\n\n")
+```
+
+# Ver nombres de ficheros
+```{r}
+# Puntos.txt: casos malos
+nombre_fich <- basename(puntos_files)
+casos_raros <- table(nombre_fich)
+cat("Hay estos nombres distintos:\n")
+print(casos_raros)
+
+# Puntos.txt: casos buenos
+correctos <- sum(nombre_fich == "puntos.txt")
+cat("Estos son los que tienen correcto el nombre: ", correctos,"\n")
+cat("Estos son los que tienen mal el nombre: ", sum(nombre_fich != "puntos.txt"), "\n")
+```
+
+# Vemos los puntos junto justificantes
+```{r}
+# Extraemos de la carpeta puntos
+carpeta_puntos <- unique(dirname(puntos_files))
+carpeta_justificantes <- unique(dirname(justificantes))
+
+juntos <- intersect(carpeta_puntos, carpeta_justificantes)
+puntitos_solo <- setdiff(carpeta_puntos, carpeta_justificantes)
+justificantes_solo <- setdiff(carpeta_justificantes, carpeta_puntos)
+
+cat("Los que tienen tanto justificantes como puntos son:", length(juntos), "\n")
+cat("Pero los que solo tienen puntos(sin justificante):", length(puntitos_solo), "\n")
+cat("Por último los que tienen solo justificante (sin puntos):", length(justificantes_solo), "\n")
+```
+
+# Dataframe
+```{r}
+# Creamos listas
+apellidos_list <- character(length(puntos_files))
+puntos_num_list <- numeric(length(puntos_files))
+nomfile_list <- character(length(puntos_files))
+puntos_str_list <- character(length(puntos_files))
+
+# Hacemos bucle for
+for (i in seq_along(puntos_files)) {
+  ruta <- puntos_files[i]
+  nombre_carpeta <- basename(dirname(ruta))
+  
+  apellidos_list[i] <- str_trim(strsplit(nombre_carpeta, ",")[[1]][1])
+  
+  nomfile_list[i] <- basename(ruta)
+  
+  # Leer
+  contenido <- readLines(ruta, warn = FALSE)
+  puntos_str_list[i] <- paste(contenido, collapse = " ")
+  
+  # Extraemos numero
+  if (length(contenido) == 0) {
+    puntos_num_list[i] <- NA
+  } else {
+    puntos_num_list[i] <- as.numeric(gsub("[^0-9.]", "", puntos_str_list[i]))
+  }
+}
+
+# Creamos dataframe
+evalua_df <- data.frame(     
+  apellidos = apellidos_list,
+  puntos = puntos_num_list,
+  NomFile = nomfile_list,
+  Puntos = puntos_str_list,
+  stringsAsFactors = FALSE
+)
+
+# Ordenamos por apellidos
+evalua_df <- evalua_df[order(evalua_df$apellidos), ] 
+cat("Hay un total de", nrow(evalua_df), "entregas procesadas\n") 
+```
+
+# NotasRIntermedio.xlsx
+```{r}
+# Generamos un fichero llamado: "NotasRIntermedio.xlsx"
+write_xlsx(evalua_df, "NotasRIntermedio.xlsx")
+```
+
+# Alumnos matriculados junto a los datos
+```{r}
+# Primero cargamos los datos
+alumnos <- read_excel("data/AlumnosTD25_26.xlsx")
+
+# Limpiar
+alumnos$`Apellido(s)` <- str_trim(toupper(alumnos$`Apellido(s)`))
+evalua_df$apellidos   <- str_trim(toupper(evalua_df$apellidos))
+
+# Merge por apellidos
+solucion <- merge(alumnos, evalua_df, 
+                  by.x =  "Apellido(s)", 
+                  by.y = "apellidos",
+                  all.x = TRUE)
+```
+
+# Exportamos 
+```{r}
+write_xlsx(solucion, "AlumnosNotas.xlsx")
+```
